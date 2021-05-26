@@ -19,6 +19,7 @@ import au.com.bytecode.opencsv.CSVWriter;
 import au.org.ala.biocache.dto.*;
 import au.org.ala.biocache.service.*;
 import au.org.ala.biocache.stream.OptionalZipOutputStream;
+import au.org.ala.biocache.stream.ProcessInterface;
 import au.org.ala.biocache.util.*;
 import au.org.ala.biocache.util.solr.FieldMappingUtil;
 import au.org.ala.biocache.util.thread.EndemicCallable;
@@ -168,16 +169,16 @@ public class SearchDAOImpl implements SearchDAO {
     protected QueryFormatUtils queryFormatUtils;
 
     @Inject
-    protected FieldMappingUtil fieldMappingUtil;
+    public FieldMappingUtil fieldMappingUtil;
 
     @Inject
-    protected CollectionsCache collectionCache;
+    public CollectionsCache collectionCache;
 
     @Inject
-    protected AbstractMessageSource messageSource;
+    public AbstractMessageSource messageSource;
 
     @Inject
-    protected SpeciesLookupService speciesLookupService;
+    public SpeciesLookupService speciesLookupService;
 
     @Inject
     protected AuthService authService;
@@ -198,7 +199,7 @@ public class SearchDAOImpl implements SearchDAO {
     protected SpeciesImageService speciesImageService;
 
     @Inject
-    protected ListsService listsService;
+    public ListsService listsService;
 
     @Inject
     protected DownloadService downloadService;
@@ -832,7 +833,7 @@ public class SearchDAOImpl implements SearchDAO {
      * @param writer          The CSV writer to write to.
      * @throws Exception
      */
-    private void writeTaxonDetailsToStream(List<String> guids, List<Long> counts, boolean includeCounts, boolean includeSynonyms, boolean includeLists, CSVRecordWriter writer) throws Exception {
+    public void writeTaxonDetailsToStream(List<String> guids, List<Long> counts, boolean includeCounts, boolean includeSynonyms, boolean includeLists, CSVRecordWriter writer) throws Exception {
         List<String[]> values = speciesLookupService.getSpeciesDetails(guids, counts, includeCounts, includeSynonyms, includeLists);
         for (String[] value : values) {
             writer.write(value);
@@ -2584,8 +2585,8 @@ public class SearchDAOImpl implements SearchDAO {
                 solrQuery.add("facet.prefix", searchParams.getFprefix());
         }
 
-        solrQuery.setRows(10);
-        solrQuery.setStart(0);
+        solrQuery.setRows(searchParams.getPageSize());
+        solrQuery.setStart(searchParams.getStart());
 
         if (searchParams.getFl().length() > 0) {
 
@@ -3849,5 +3850,20 @@ public class SearchDAOImpl implements SearchDAO {
             statsList.add(stats);
         }
         return statsList;
+    }
+
+    @Override
+    public int streamingQuery(SpatialSearchRequestParams request, ProcessInterface procSearch, ProcessInterface procFacet) throws Exception {
+        return indexDao.streamingQuery(buildSolrQuery(request), procSearch, procFacet);
+    }
+
+    public SolrQuery buildSolrQuery(SpatialSearchRequestParams request) throws Exception {
+        queryFormatUtils.formatSearchQuery(request);
+
+        String queryString = request.getFormattedQuery();
+        SolrQuery solrQuery = initSolrQuery(request, true, null);
+        solrQuery.setQuery(queryString);
+
+        return solrQuery;
     }
 }

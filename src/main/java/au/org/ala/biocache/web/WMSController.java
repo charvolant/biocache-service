@@ -16,9 +16,12 @@ package au.org.ala.biocache.web;
 
 import au.org.ala.biocache.dao.QidCacheDAO;
 import au.org.ala.biocache.dao.SearchDAO;
+import au.org.ala.biocache.dao.SearchDAOImpl;
 import au.org.ala.biocache.dao.TaxonDAO;
 import au.org.ala.biocache.dto.*;
+import au.org.ala.biocache.stream.StreamAsCSV;
 import au.org.ala.biocache.util.*;
+import au.org.ala.biocache.util.solr.FieldMappingUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
@@ -37,6 +40,7 @@ import org.opengis.referencing.crs.CRSAuthorityFactory;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.opengis.referencing.operation.CoordinateOperation;
 import org.opengis.referencing.operation.TransformException;
+import org.springframework.aop.framework.Advised;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.ehcache.EhCacheManagerFactoryBean;
 import org.springframework.stereotype.Controller;
@@ -103,7 +107,7 @@ public class WMSController extends AbstractSecureController{
      * add pixel radius for wms highlight circles
      */
     @Value("${wms.highlight.radius:3}")
-    private static int HIGHLIGHT_RADIUS;
+    public static int HIGHLIGHT_RADIUS;
 
     /**
      * max WMS point width in pixels. This makes better use of the searchDAO.getHeatMap cache.
@@ -147,7 +151,7 @@ public class WMSController extends AbstractSecureController{
     @Inject
     protected QidCacheDAO qidCacheDAO;
     @Inject
-    protected WMSCache wmsCache;
+    public FieldMappingUtil fieldMappingUtil;
 
     /**
      * Load a smaller 256x256 png than java.image produces
@@ -636,6 +640,10 @@ public class WMSController extends AbstractSecureController{
     }
 
     private void writeOccurrencesCsvToStream(SpatialSearchRequestParams requestParams, OutputStream stream) throws Exception {
+        searchDAO.streamingQuery(requestParams, new StreamAsCSV(fieldMappingUtil, stream, requestParams), null);
+    }
+
+    private void writeOccurrencesCsvToStreamOld(SpatialSearchRequestParams requestParams, OutputStream stream) throws Exception {
         SolrDocumentList sdl = searchDAO.findByFulltext(requestParams);
 
         byte[] bComma = ",".getBytes(StandardCharsets.UTF_8);
@@ -1330,18 +1338,6 @@ public class WMSController extends AbstractSecureController{
             colorIdx++;
         }
         return sb.toString();
-    }
-
-    @RequestMapping(value = {"/webportal/wms/clearCache", "/ogc/wms/clearCache", "/mapping/wms/clearCache"}, method = RequestMethod.GET)
-    public void clearWMSCache(HttpServletResponse response,
-                              @RequestParam(value = "apiKey") String apiKey) throws Exception {
-        if (isValidKey(apiKey)) {
-            wmsCache.empty();
-            response.setStatus(200);
-            regenerateWMSETag();
-        } else {
-            response.setStatus(401);
-        }
     }
 
     /**
